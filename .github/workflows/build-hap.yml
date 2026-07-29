@@ -1,0 +1,158 @@
+name: Build HAP (nightly)
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'AppScope/**'
+      - 'entry/**'
+      - 'libs/**'
+      - 'oh-package.json5'
+      - 'hvigor/**'
+      - '.github/workflows/build-hap.yml'
+  workflow_dispatch:
+
+env:
+  CLT_BASE_URL: https://github.com/jerry-271828/harmonyos-commandline-tools/releases/download/v26.0.0.461
+  CLT_SHA256: b046da0a1a06fe13b3d82d198738abc54788d79c6c9d07c36617ec7fc31a3b3b
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Download HarmonyOS command-line-tools
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSL --retry 3 -O "$CLT_BASE_URL/clt.zip.part00" -O "$CLT_BASE_URL/clt.zip.part01"
+          cat clt.zip.part00 clt.zip.part01 > clt.zip
+          rm -f clt.zip.part00 clt.zip.part01
+          echo "$CLT_SHA256  clt.zip" | sha256sum -c
+          unzip -q clt.zip -d "$HOME"
+          rm -f clt.zip
+
+      - name: Set up build environment
+        run: |
+          CLT="$HOME/command-line-tools"
+          echo "$CLT/bin" >> "$GITHUB_PATH"
+          echo "$CLT/tool/node/bin" >> "$GITHUB_PATH"
+          echo "DEVECO_SDK_HOME=$CLT/sdk" >> "$GITHUB_ENV"
+
+      # CLT v26 内嵌 hvigor 仅支持 modelVersion 5.0.0，仓库内固定为 6.0.2（DevEco 6.0.2），CI 侧降级后再构建。
+      - name: Downgrade hvigor modelVersion for CLT
+        run: |
+          sed -i 's/"modelVersion": *"6\.0\.2"/"modelVersion": "5.0.0"/' hvigor/hvigor-config.json5 oh-package.json5
+          grep -H modelVersion hvigor/hvigor-config.json5 oh-package.json5
+
+      - name: ohpm install
+        run: |
+          ohpm config set registry https://ohpm.openharmony.cn/ohpm/
+          ohpm install --all
+
+      # 仓库内 build-profile.json5 含本地签名配置（macOS 路径），CI 生成一份未签名的干净版本，
+      # compileSdkVersion 对齐工具包内嵌的 API 26。
+      - name: Generate build-profile.json5 for CI
+        run: |
+          cat > build-profile.json5 << 'EOF'
+          {
+            "app": {
+              "signingConfigs": [],
+              "products": [
+                {
+                  "name": "default",
+                  "signingConfig": "default",
+                  "compileSdkVersion": "26.0.0(26.0.0)",
+                  "compatibleSdkVersion": "6.0.2(22)",
+                  "targetSdkVersion": "6.0.2(22)",
+                  "runtimeOS": "HarmonyOS"
+                }
+              ],
+              "buildModeSet": [
+                { "name": "debug" },
+                { "name": "release" }
+              ]
+            },
+            "modules": [
+              {
+                "name": "entry",
+                "srcPath": "./entry",
+                "targets": [
+                  { "name": "default", "applyToProducts": ["default"] }
+                ]
+              },
+              {
+                "name": "xb_components",
+                "srcPath": "./xb_components"
+              },
+              {
+                "name": "lwjgl3",
+                "srcPath": "./libs/lwjgl3"
+              },
+              {
+                "name": "jre25",
+                "srcPath": "./libs/jre25",
+                "targets": [
+                  { "name": "default", "applyToProducts": ["default"] }
+                ]
+              },
+              {
+                "name": "jre17",
+                "srcPath": "./libs/jre17",
+                "targets": [
+                  { "name": "default", "applyToProducts": ["default"] }
+                ]
+              }
+            ]
+          }
+          EOF
+          grep SdkVersion build-profile.json5
+
+      - name: Build HAP (release, unsigned)
+        run: hvigorw --mode module -p product=default -p buildMode=release assembleHap --no-daemon
+
+      - name: Locate artifacts
+        run: find entry/build -name '*.hap' -print
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: homl-hap
+          path: entry/build/default/outputs/**/*.hap
+          if-no-files-found: error
+
+      - name: Publish nightly release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          shopt -s globstar nullglob
+          haps=(entry/build/default/outputs/**/*.hap)
+          if [ ${#haps[@]} -eq 0 ]; then echo "no .hap found"; exit 1; fi
+
+          ver=$(grep -oP '"versionName"\s*:\s*"\K[^"]+' AppScope/app.json5)
+          sha7=${GITHUB_SHA::7}
+
+          assets=()
+          for h in "${haps[@]}"; do
+            dst="$RUNNER_TEMP/$(basename "$h" .hap)-${ver}-${sha7}.hap"
+            cp "$h" "$dst"
+            assets+=("$dst")
+          done
+
+          gh release delete nightly --yes --cleanup-tag --repo "$GITHUB_REPOSITORY" || true
+          gh release create nightly "${assets[@]}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Nightly ${ver} (${sha7})" \
+            --prerelease \
+            --notes "自动构建的**未签名** HAP（versionName ${ver}，commit \`${sha7}\`）。装机需本地签名或在 DevEco 中重新签名。"
