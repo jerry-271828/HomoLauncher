@@ -29,7 +29,14 @@ export class NativeInput {
     const type = event.type
     this.sendNativeKeycode(keycode, '\u0000', 0, this.getCurrentMods(), type == KeyType.Down)
     if (type == KeyType.Down && this.menu.cursorEnabled){
-      this.sendCharByUnicode(event.unicode ?? 0)
+      let unicode = event.unicode ?? 0
+      // KeyEvent.unicode excludes spaces, so physical keyboards report 0 for KEYCODE_SPACE.
+      if (keycode == KeyCode.KEYCODE_SPACE) {
+        unicode = 0x20
+      }
+      if (unicode != 0) {
+        this.sendCharByUnicode(unicode)
+      }
       if(keycode == KeyCode.KEYCODE_DEL){
         this.sendNativeKeycode(KeyCode.KEYCODE_BACK, '\u0008', 0, this.getCurrentMods(), type == KeyType.Down)
       }
