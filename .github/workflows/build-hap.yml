@@ -75,7 +75,13 @@ jobs:
                   "compileSdkVersion": "26.0.0(26.0.0)",
                   "compatibleSdkVersion": "6.0.2(22)",
                   "targetSdkVersion": "6.0.2(22)",
-                  "runtimeOS": "HarmonyOS"
+                  "runtimeOS": "HarmonyOS",
+                  "buildOption": {
+                    "strictMode": {
+                      "caseSensitiveCheck": true,
+                      "useNormalizedOHMUrl": true
+                    }
+                  }
                 }
               ],
               "buildModeSet": [
