@@ -6,6 +6,11 @@
       "buildFunction": "VersionDetailBuilder"
     },
     {
+      "name": "version_download",
+      "pageSourceFile": "src/main/ets/view/VersionDownload.ets",
+      "buildFunction": "VersionDownloadBuilder"
+    },
+    {
       "name": "global_game_options",
       "pageSourceFile": "src/main/ets/view/GameOptions.ets",
       "buildFunction": "GameOptionsBuilder"

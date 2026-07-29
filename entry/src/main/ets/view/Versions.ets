@@ -1,8 +1,7 @@
 import { Xb_ActionType,
   Xb_CircleButton,
   Xb_FileUtils,
-  Xb_getAppStore, Xb_getPersistence, Xb_SettingsItem, Xb_SettingsItemData,
-  Xb_ToastUtil } from "xb_components"
+  Xb_getAppStore, Xb_getPersistence, Xb_SettingsItem, Xb_SettingsItemData } from "xb_components"
 import { getColorWithTransparency } from "../common/util/ColorWithTransparency"
 import { VersionListView } from "../components/VersionListView"
 import { HomlViewModel } from "../core/HomlViewModel"
@@ -73,15 +72,15 @@ export struct Versions {
         .height('100%')
         // 工具
         Row({ space: 5 }) {
-          // Xb_CircleButton({
-          //   icon: $r('sys.symbol.text_and_arrow_down'),
-          //   iconBackgroundColor: Color.Transparent,
-          //   iconColor: $r('sys.color.font_primary'),
-          //   theBackgroundColor: Color.Transparent,
-          //   onCheck: () => {
-          //     Xb_ToastUtil.showToast({ message: '开发中' })
-          //   }
-          // })
+          Xb_CircleButton({
+            icon: $r('sys.symbol.text_and_arrow_down'),
+            iconBackgroundColor: Color.Transparent,
+            iconColor: $r('sys.color.font_primary'),
+            theBackgroundColor: Color.Transparent,
+            onCheck: () => {
+              this.pageStack.pushPathByName('version_download', true)
+            }
+          })
           Xb_CircleButton({
             icon: $r('sys.symbol.plus_circle'),
             iconBackgroundColor: Color.Transparent,
