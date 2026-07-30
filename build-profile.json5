@@ -1,29 +1,14 @@
 {
   "app": {
-    "signingConfigs": [
-      {
-        "name": "default",
-        "type": "HarmonyOS",
-        "material": {
-          "certpath": "/Users/xiaobai/.ohos/config/default_HOML_yTJqqaB5A5nn67vu-3BRVa7jPL5j0vGAHL7CCl3H0rE=.cer",
-          "keyAlias": "debugKey",
-          "keyPassword": "0000001B18FD11FBC50011372122468A0BF37B8BACBECC25D028646B33F76598E4280FA4C1F3A4CADED4B0",
-          "profile": "/Users/xiaobai/.ohos/config/default_HOML_yTJqqaB5A5nn67vu-3BRVa7jPL5j0vGAHL7CCl3H0rE=.p7b",
-          "signAlg": "SHA256withECDSA",
-          "storeFile": "/Users/xiaobai/.ohos/config/default_HOML_yTJqqaB5A5nn67vu-3BRVa7jPL5j0vGAHL7CCl3H0rE=.p12",
-          "storePassword": "0000001B5DD9A58029A9397B1DDF3B5E2C08DE3D5DDCD2D963F1AB2D2464C29513FD0B897907982D09E03F"
-        }
-      }
-    ],
+    "signingConfigs": [],
     "products": [
       {
         "name": "default",
-        "signingConfig": "default",
+        "compileSdkVersion": "26.0.0(26.0.0)",
         "targetSdkVersion": "6.0.2(22)",
         "compatibleSdkVersion": "6.0.2(22)",
         "runtimeOS": "HarmonyOS",
         "buildOption": {
-          "nativeCompiler": "BiSheng",
           "strictMode": {
             "caseSensitiveCheck": true,
             "useNormalizedOHMUrl": true
@@ -33,7 +18,7 @@
     ],
     "buildModeSet": [
       {
-        "name": "debug",
+        "name": "debug"
       },
       {
         "name": "release"
@@ -55,11 +40,11 @@
     },
     {
       "name": "xb_components",
-      "srcPath": "./xb_components",
+      "srcPath": "./xb_components"
     },
     {
       "name": "lwjgl3",
-      "srcPath": "./libs/lwjgl3",
+      "srcPath": "./libs/lwjgl3"
     },
     {
       "name": "jre25",

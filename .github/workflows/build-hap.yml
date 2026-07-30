@@ -7,8 +7,12 @@ on:
       - 'AppScope/**'
       - 'entry/**'
       - 'libs/**'
+      - 'xb_components'
+      - 'build-profile.json5'
       - 'oh-package.json5'
+      - 'oh-package-lock.json5'
       - 'hvigor/**'
+      - '.gitmodules'
       - '.github/workflows/build-hap.yml'
   workflow_dispatch:
 
@@ -60,69 +64,21 @@ jobs:
           ohpm config set registry https://ohpm.openharmony.cn/ohpm/
           ohpm install --all
 
-      # 仓库内 build-profile.json5 含本地签名配置（macOS 路径），CI 生成一份未签名的干净版本，
-      # compileSdkVersion 对齐工具包内嵌的 API 26。
-      - name: Generate build-profile.json5 for CI
+      # 仓库配置必须保持可移植；个人证书与绝对路径只能留在本机。
+      - name: Verify portable project configuration
         run: |
-          cat > build-profile.json5 << 'EOF'
-          {
-            "app": {
-              "signingConfigs": [],
-              "products": [
-                {
-                  "name": "default",
-                  "signingConfig": "default",
-                  "compileSdkVersion": "26.0.0(26.0.0)",
-                  "compatibleSdkVersion": "6.0.2(22)",
-                  "targetSdkVersion": "6.0.2(22)",
-                  "runtimeOS": "HarmonyOS",
-                  "buildOption": {
-                    "strictMode": {
-                      "caseSensitiveCheck": true,
-                      "useNormalizedOHMUrl": true
-                    }
-                  }
-                }
-              ],
-              "buildModeSet": [
-                { "name": "debug" },
-                { "name": "release" }
-              ]
-            },
-            "modules": [
-              {
-                "name": "entry",
-                "srcPath": "./entry",
-                "targets": [
-                  { "name": "default", "applyToProducts": ["default"] }
-                ]
-              },
-              {
-                "name": "xb_components",
-                "srcPath": "./xb_components"
-              },
-              {
-                "name": "lwjgl3",
-                "srcPath": "./libs/lwjgl3"
-              },
-              {
-                "name": "jre25",
-                "srcPath": "./libs/jre25",
-                "targets": [
-                  { "name": "default", "applyToProducts": ["default"] }
-                ]
-              },
-              {
-                "name": "jre17",
-                "srcPath": "./libs/jre17",
-                "targets": [
-                  { "name": "default", "applyToProducts": ["default"] }
-                ]
-              }
-            ]
-          }
-          EOF
-          grep SdkVersion build-profile.json5
+          if ! grep -Eq '"signingConfigs"[[:space:]]*:[[:space:]]*\[\]' build-profile.json5; then
+            echo "build-profile.json5 must use an empty signingConfigs array"
+            exit 1
+          fi
+          if grep -Eq '(/Users/|/storage/Users/|[A-Za-z]:\\\\)' build-profile.json5; then
+            echo "build-profile.json5 contains a machine-specific absolute path"
+            exit 1
+          fi
+          if grep -Eq '"signingConfig"[[:space:]]*:' build-profile.json5; then
+            echo "build-profile.json5 must not select a local signing config"
+            exit 1
+          fi
 
       - name: Build HAP (release, unsigned)
         run: hvigorw --mode module -p product=default -p buildMode=release assembleHap --no-daemon
