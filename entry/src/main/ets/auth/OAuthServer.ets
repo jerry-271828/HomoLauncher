@@ -2,6 +2,14 @@ import { EventHub, Xb_Copy, Xb_FileUtils, Xb_GetResourceString, Xb_GoToWeb, Xb_T
 import { EventKey } from '../common/EventKey';
 import { Callback, Session,} from './OAuth';
 
+// 保证编译进 resources.index 的值非空；小白调试助手 3.1 无法解析零长度资源。
+const UNCONFIGURED_MICROSOFT_CLIENT_ID = "__UNCONFIGURED_MICROSOFT_CLIENT_ID__"
+
+export function getMicrosoftClientId(): string {
+  const clientId = Xb_GetResourceString($r("app.string.MicrosortAuthClientId"))
+  return clientId === UNCONFIGURED_MICROSOFT_CLIENT_ID ? "" : clientId
+}
+
 export interface GrantDeviceCodeEvent{
   userCode: string
   verificationUri: string
@@ -24,7 +32,7 @@ export class OAuthServer implements Callback{
   }
 
   getClientId(): string {
-    return Xb_GetResourceString($r("app.string.MicrosortAuthClientId"))
+    return getMicrosoftClientId()
   }
 
   getClientSecret(): string | null {

@@ -11,9 +11,10 @@
     {
       "name": "EntryAbility_label",
       "value": "Homo Launcher"
-    },{
+    },
+    {
       "name": "MicrosortAuthClientId",
-      "value": ""
+      "value": "__UNCONFIGURED_MICROSOFT_CLIENT_ID__"
     }
   ]
 }

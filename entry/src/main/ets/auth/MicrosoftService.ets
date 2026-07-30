@@ -6,7 +6,7 @@ import { OAuth, Callback, GrantFlow, Result as OAuthResult, AuthenticationExcept
   withQuery, } from './OAuth';
 import { http } from '@kit.NetworkKit';
 import { MinecraftAccount } from '../model/MinecraftAccount';
-import { Xb_GetResourceString } from 'xb_components';
+import { getMicrosoftClientId } from './OAuthServer';
 
 // 常量
 const SCOPE = "XboxLive.signin offline_access";
@@ -350,7 +350,7 @@ export class MicrosoftSession {
     account.profileId = this.profile.id
     account.username = this.user.username
     account.xuid = undefined
-    account.clientToken = Xb_GetResourceString($r("app.string.MicrosortAuthClientId"))
+    account.clientToken = getMicrosoftClientId()
     account.session = this
     return account;
   }

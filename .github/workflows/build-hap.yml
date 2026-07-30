@@ -130,6 +130,43 @@ jobs:
       - name: Locate artifacts
         run: find entry/build -name '*.hap' -print
 
+      # 小白调试助手 3.1 的 resources.index 解析器不能处理零长度资源值。
+      # 发布前使用 SDK 自带 restool 检查，避免生成选择文件时即抛 RangeError 的 HAP。
+      - name: Verify installer-compatible resources
+        run: |
+          set -euo pipefail
+          shopt -s globstar nullglob
+          haps=(entry/build/default/outputs/**/*.hap)
+          if [ ${#haps[@]} -eq 0 ]; then echo "no .hap found"; exit 1; fi
+
+          restool_path=$(find -L "$DEVECO_SDK_HOME" -type f -path '*/toolchains/restool' -print -quit)
+          if [ -z "$restool_path" ]; then echo "restool not found"; exit 1; fi
+
+          for hap in "${haps[@]}"; do
+            dump_file="$RUNNER_TEMP/$(basename "$hap").resources.json"
+            "$restool_path" dump "$hap" > "$dump_file"
+            node - "$dump_file" "$hap" <<'NODE'
+          const fs = require('fs');
+          const dumpPath = process.argv[2];
+          const hapPath = process.argv[3];
+          const document = JSON.parse(fs.readFileSync(dumpPath, 'utf8'));
+          const emptyResources = [];
+
+          for (const resource of document.resource ?? []) {
+            for (const entry of resource.entryValues ?? []) {
+              if (entry.value === '') {
+                emptyResources.push(`${resource.type}:${resource.name}`);
+              }
+            }
+          }
+
+          if (emptyResources.length > 0) {
+            console.error(`${hapPath} contains zero-length resources: ${emptyResources.join(', ')}`);
+            process.exit(1);
+          }
+          NODE
+          done
+
       - uses: actions/upload-artifact@v4
         with:
           name: homl-hap
