@@ -94,8 +94,16 @@ async function ensureParentDir(path: string): Promise<void> {
     return
   }
   const dir = path.substring(0, index)
-  if (!await fileIo.access(dir)) {
+  if (await fileIo.access(dir)) {
+    return
+  }
+  try {
     await fileIo.mkdir(dir, true)
+  } catch (e) {
+    // 并发下载时其他任务可能已创建同名目录（13900015 File exists），目录确实存在则忽略
+    if (!await fileIo.access(dir)) {
+      throw e
+    }
   }
 }
 
@@ -133,14 +141,29 @@ async function downloadFile(url: string, destPath: string, expectedSize: number)
       throw new Error(`文件大小不符 ${data.byteLength}/${expectedSize}`)
     }
     const tmpPath = destPath + '.tmp'
-    const file = await fileIo.open(tmpPath,
-      fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC)
     try {
-      await fileIo.write(file.fd, data)
-    } finally {
-      await fileIo.close(file)
+      const file = await fileIo.open(tmpPath,
+        fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC)
+      try {
+        await fileIo.write(file.fd, data)
+      } finally {
+        await fileIo.close(file)
+      }
+      // HarmonyOS 的 rename 不会覆盖已存在的目标文件（报 13900015 File exists），需先删后改名
+      if (await fileIo.access(destPath)) {
+        await fileIo.unlink(destPath)
+      }
+      await fileIo.rename(tmpPath, destPath)
+    } catch (e) {
+      // 清理残留临时文件，避免影响下次重试
+      try {
+        if (await fileIo.access(tmpPath)) {
+          await fileIo.unlink(tmpPath)
+        }
+      } catch (_) {
+      }
+      throw e
     }
-    await fileIo.rename(tmpPath, destPath)
   } finally {
     request.destroy()
   }
