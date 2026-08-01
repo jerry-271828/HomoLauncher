@@ -102,7 +102,7 @@ async function ensureParentDir(path: string): Promise<void> {
   } catch (e) {
     // 并发下载时其他任务可能已创建同名目录（13900015 File exists），目录确实存在则忽略
     if (!await fileIo.access(dir)) {
-      throw e
+      throw e as Error
     }
   }
 }
@@ -162,7 +162,7 @@ async function downloadFile(url: string, destPath: string, expectedSize: number)
         }
       } catch (_) {
       }
-      throw e
+      throw e as Error
     }
   } finally {
     request.destroy()
