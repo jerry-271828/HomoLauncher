@@ -151,6 +151,8 @@ export class JVMLauncher {
     // JVM 致命错误日志落到下载目录，便于事后分析（目录未初始化时不加该参数）
     if (Xb_GlobalContext.downloadDir != "") {
       overridableArguments.push(`-XX:ErrorFile=${Xb_GlobalContext.downloadDir}/hs_err.log`)
+      // 异常事件日志直写文件：定位黑屏/崩溃的主异常，不依赖日志页转发
+      overridableArguments.push(`-Xlog:exceptions=debug:file=${Xb_GlobalContext.downloadDir}/exceptions.log`)
     }
     overridableArguments.push(`-javaagent:${context.resourceDir}/patchjna_agent.jar=`)
     overridableArguments.push(`-javaagent:${context.resourceDir}/arc_dns_injector.jar=23.95.137.176`)
