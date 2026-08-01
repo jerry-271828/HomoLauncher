@@ -148,6 +148,10 @@ export class JVMLauncher {
       `-Djdk.lang.Process.launchMechanism=FORK`
     ];
 
+    // JVM 致命错误日志落到下载目录，便于事后分析（目录未初始化时不加该参数）
+    if (Xb_GlobalContext.downloadDir != "") {
+      overridableArguments.push(`-XX:ErrorFile=${Xb_GlobalContext.downloadDir}/hs_err.log`)
+    }
     overridableArguments.push(`-javaagent:${context.resourceDir}/patchjna_agent.jar=`)
     overridableArguments.push(`-javaagent:${context.resourceDir}/arc_dns_injector.jar=23.95.137.176`)
     let isJre8 = false
