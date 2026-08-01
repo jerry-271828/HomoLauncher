@@ -228,6 +228,10 @@ export class HomlViewModel {
   async switchJre(){
     const id = this.current!.id
     const settings = getVersionSetting(id)
+    // 提前初始化下载目录，保证 JVM 诊断日志（hs_err/exceptions.log）能落盘
+    if (Xb_GlobalContext.downloadDir == "") {
+      await Xb_GlobalContext.initDownloadDir()
+    }
     return await jvmLauncher.switchJre(settings.jreVersion)
   }
 
