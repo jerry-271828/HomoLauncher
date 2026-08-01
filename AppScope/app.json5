@@ -2,8 +2,8 @@
   "app": {
     "bundleName": "org.xbstudio.homl",
     "vendor": "xiaoabi",
-    "versionCode": 1010000,
-    "versionName": "1.1.0",
+    "versionCode": 1030000,
+    "versionName": "1.3.0",
     "appEnvironments": [
       {
         "name": "NEED_OPENGL",
