@@ -61,6 +61,13 @@ jobs:
           sed -i 's/"modelVersion": *"6\.0\.2"/"modelVersion": "5.0.0"/' hvigor/hvigor-config.json5 oh-package.json5
           grep -H modelVersion hvigor/hvigor-config.json5 oh-package.json5
 
+      # 每次构建递增 versionCode（1030000+run_number），避免同版本号安装被系统按"新版已经安装"拦截
+      - name: Bump versionCode for this build
+        run: |
+          newCode=$((1030000 + ${{ github.run_number }}))
+          sed -i "s/\"versionCode\": *[0-9]*/\"versionCode\": ${newCode}/" AppScope/app.json5
+          grep -H versionCode AppScope/app.json5
+
       - name: ohpm install
         run: |
           ohpm config set registry https://ohpm.openharmony.cn/ohpm/
