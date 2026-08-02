@@ -99,6 +99,8 @@ export class JVMLauncher {
       `-Djava.home=${javaHome}`,
       `-DServer_Ip=${serverIp}`,
       `-Djava.io.tmpdir=${dirCache}`,
+      `-Djava.library.path=${nativeLibDir}`,
+      `-Dorg.lwjgl.librarypath=${nativeLibDir}`,
       `-Djna.boot.library.path=${nativeLibDir}`,
       `-Djna.nosys=false`,
       `-Doshi.util.disable.cpufrequency=true`,
