@@ -76,14 +76,16 @@ export class HomlViewModel {
     if (hasJit()){
       if(this.launching){
         return
-      }else {
-        this.launching = true
+      }
+      this.launching = true
+      try {
         if(await this.switchJre()){
-          this.launching = false
           HOMLState.pageStack.pushPathByName("GamePage", true)
         }
+      } finally {
+        // HSP 缺失、版本不匹配或动态导入失败时也必须允许再次启动。
+        this.launching = false
       }
-
     } else {
       const versionSettings = getVersionSetting(this.current!.id)
       this.controllerViewModel.switchController(versionSettings.controller)
@@ -216,14 +218,14 @@ export class HomlViewModel {
     const settings = getVersionSetting(id)
     return getRunDirectory(id, this.gameRootDir, settings)
 	}
-  launch(){
+  launch(width?: number, height?: number): boolean{
     const id = this.current!.id
     const gameMenuState = Xb_getPersistence(Xb_GameMenuState)
     const settings = getVersionSetting(id)
-    jvmLauncher.launch(Xb_GlobalContext.getContext(),
+    return jvmLauncher.launch(Xb_GlobalContext.getContext(),
       this.gameProfile.lastAccount,
       {id: this.current!.id, homeDir: this.homeDir, gameRootDir: this.gameRootDir, settings: settings, version: this.current!, arguments:[]},
-      gameMenuState?.screenWidth, gameMenuState?.screenHeight)
+      width ?? gameMenuState?.screenWidth, height ?? gameMenuState?.screenHeight)
   }
   async switchJre(){
     const id = this.current!.id

@@ -16,6 +16,9 @@ export enum JAVA_VERSION{
   JAVA25 = "jre25",
 }
 
+// HAP 与动态 HSP 必须来自同一次构建。旧 HSP 没有该导出，会在进入黑屏页前被拒绝。
+const HOML_NATIVE_RUNTIME_REVISION = 2
+
 export function hasJre(jre:string): boolean {
   try {
     return hasJreXz(Xb_GlobalContext.getContext(), jre)
@@ -42,7 +45,6 @@ export class JVMLauncher {
   }
   async switchJre(jre: JAVA_VERSION): Promise<boolean>{
     const context = Xb_GlobalContext.getContext()
-    this.jre = jre
     if (!hasJreXz(context, jre)){
       Xb_ToastUtil.showToast({message:`请安装hsp(${jre})`})
       return false
@@ -51,7 +53,13 @@ export class JVMLauncher {
 
       await installJre(context, jre)
       let ns: ESObject = await import(jre);
+      if (ns.HOML_NATIVE_RUNTIME_REVISION !== HOML_NATIVE_RUNTIME_REVISION) {
+        console.error(`HSP runtime mismatch: ${jre}, expected=${HOML_NATIVE_RUNTIME_REVISION}, actual=${ns.HOML_NATIVE_RUNTIME_REVISION}`)
+        Xb_ToastUtil.showToast({message:`hsp(${jre})版本不匹配，请安装同一次构建的HAP和HSP`})
+        return false
+      }
       this.bridge = ns.homl_bridge
+      this.jre = jre
       return true
     }catch (e) {
       Xb_ToastUtil.showToast({message:`加载hsp(${jre})失败:` + e.message})
@@ -64,7 +72,7 @@ export class JVMLauncher {
     username: string,
     launchTarget: string | LaunchTarget = "test_lwjgl-1.0.jar",
     width = 900, height = 900
-  ) {
+  ): boolean {
 
     const jreVersion = this.jre
     let appName = "鸿蒙版";
@@ -244,7 +252,9 @@ export class JVMLauncher {
     }
     if(this.initEnv(context, dirHome, javaHome, nativeLibDir, renderer)){
       this.bridge.jvm_Launcher(overridableArguments)
+      return true
     }
+    return false
   }
    initEnv(context: Context, dirHome:string, java_home: string, java_dl_dir: string,  glibName: string): boolean{
     const setenv = this.bridge.set_env

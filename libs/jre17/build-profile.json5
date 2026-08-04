@@ -10,6 +10,12 @@
   "buildOptionSet": [
     {
       "name": "release",
+      "nativeLib": {
+        "debugSymbol": {
+          // 自签名位于 .codesign 段；strip 会移除它并导致 fs-verity 拒绝 dlopen。
+          "strip": false
+        }
+      },
       "arkOptions": {
         "obfuscation": {
           "ruleOptions": {

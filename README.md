@@ -6,9 +6,9 @@ HomoLauncher 是面向 HarmonyOS 的 Minecraft Java 版启动器。
 
 ### 直接下载
 
-不想配置本地构建环境时，可以直接前往 [Nightly Release](https://github.com/jerry-271828/HomoLauncher/releases/tag/nightly) 下载 GitHub Actions 自动生成的最新 HAP。
+不想配置本地构建环境时，可以直接前往 [Nightly Release](https://github.com/jerry-271828/HomoLauncher/releases/tag/nightly) 下载 GitHub Actions 自动生成的最新 HAP，以及所用 Java 版本对应的 HSP（通常为 `jre25`）。两者必须来自同一次构建。
 
-Nightly 提供的是**未签名 HAP**。安装前需要使用自己的证书签名，或使用支持未签名 HAP 的调试工具。
+Nightly 提供的是**未签名 HAP/HSP**。安装前需要使用同一证书为 HAP 和 HSP 签名，并将二者一起安装；只更新 HAP 会继续加载设备上旧的 HSP，可能导致原生库加载失败。
 
 ### 从源码构建
 
@@ -34,6 +34,14 @@ git submodule update --init --recursive
 
 **Build > Build Hap(s)/App(s) > Build Hap(s)**
 
+JRE 是动态 HSP，还需要构建实际使用的模块（推荐 `jre25`）：
+
+```shell
+hvigorw --mode module -p module=jre25@default -p product=default -p buildMode=release assembleHsp --no-daemon
+```
+
+如果更新过 `libs/launcher.har`，应先清理工程根目录的 `oh_modules` 以及 `libs/jre17`、`libs/jre25` 的 `oh_modules` 和 `build`，再重新同步依赖。`file:` 依赖的旧缓存可能继续把未签名 `.so` 打进 HSP。
+
 仓库中的默认配置不包含个人证书、密码或本机 SDK 绝对路径，无需修改 `build-profile.json5` 即可生成未签名 HAP。输出目录为：
 
 ```text
@@ -51,10 +59,11 @@ entry/build/default/outputs/default/
 推送到 `master` 后，[GitHub Actions](https://github.com/jerry-271828/HomoLauncher/actions/workflows/build-hap.yml) 会自动：
 
 1. 拉取全部子模块并安装依赖。
-2. 使用仓库中的可移植配置构建 release HAP。
+2. 使用仓库中的可移植配置构建 release HAP 和 JRE HSP。
 3. 拒绝包含个人签名或本机绝对路径的工程配置。
-4. 检查 HAP 中是否存在会导致小白调试助手解析失败的零长度资源。
-5. 更新 [`nightly` 预发行版](https://github.com/jerry-271828/HomoLauncher/releases/tag/nightly)。
+4. 检查 HAR 与最终 HSP 中的原生库签名和内容是否一致，拒绝陈旧依赖缓存。
+5. 检查 HAP 中是否存在会导致小白调试助手解析失败的零长度资源。
+6. 更新 [`nightly` 预发行版](https://github.com/jerry-271828/HomoLauncher/releases/tag/nightly)。
 
 ## 小白调试助手兼容性
 
