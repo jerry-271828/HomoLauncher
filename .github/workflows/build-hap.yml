@@ -74,6 +74,9 @@ jobs:
           ohpm config set registry https://ohpm.openharmony.cn/ohpm/
           ohpm install --all
 
+      - name: Verify patched LWJGL runtime
+        run: python3 scripts/patch-lwjgl-runtime.py --check
+
       # fs-verity 会直接拒绝未补签的原生库，Java 侧只得到 error=null，表现为进入游戏后黑屏退出。
       - name: Verify signed native runtime source
         run: sh scripts/verify-native-runtime.sh libs/launcher.har
