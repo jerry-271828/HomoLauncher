@@ -6,9 +6,9 @@ HomoLauncher 是面向 HarmonyOS 的 Minecraft Java 版启动器。
 
 ### 直接下载
 
-不想配置本地构建环境时，可以直接前往 [Nightly Release](https://github.com/jerry-271828/HomoLauncher/releases/tag/nightly) 下载 GitHub Actions 自动生成的对应 JRE 成对包（通常为 `HomoLauncher-jre25-*.zip`）。ZIP 中的 HAP/HSP 具有相同的 commit 和 `versionCode`，不要与其他 Release 或 Nightly 的文件混用。
+不想配置本地构建环境时，可以直接前往 [Nightly Release](https://github.com/jerry-271828/HomoLauncher/releases/tag/nightly) 下载 GitHub Actions 自动生成的 `.app`。APP 是包含 entry、jre17、jre25 的完整 App Pack，支持 APP 的安装工具可以在同一事务中完成签名和安装，避免分步安装时 HSP 模块丢失。
 
-Nightly 提供的是**未签名 HAP/HSP**。安装前需要使用同一证书为 ZIP 中的 HAP 和 HSP 签名，并将二者一起安装；安装器只能逐个选择时，应先装 HAP，再装同一 ZIP 中的 HSP。混用不同 `versionCode` 的模块会触发“不支持降级安装”，或者让启动器继续提示未安装 HSP。
+Nightly 提供的是**未签名 APP/HAP/HSP**。优先让安装工具直接处理 APP；对应 JRE 的成对 ZIP 仅用于不支持 APP 的工具。源码不再通过字符串替换猜测 HSP 资源目录，而是使用 Bundle Manager 的 `createModuleContext` 获取已安装模块，因此安装异常会返回实际错误码，不会再误报简单的“请安装 HSP”。
 
 ### 从源码构建
 

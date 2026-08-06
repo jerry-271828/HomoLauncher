@@ -6,7 +6,7 @@ import { getRunDirectory } from "./HomlViewModel";
 import { RENDERER_LIB, VersionSetting } from "../model/VersionSetting";
 import { MinecraftVersion } from "../model/MinecraftVersion";
 import { HOMLBridge } from "./HOMLBridge";
-import { hasJreXz, installJre } from "../utils";
+import { installJre } from "../utils";
 
 
 export enum JAVA_VERSION{
@@ -20,11 +20,9 @@ export enum JAVA_VERSION{
 const HOML_NATIVE_RUNTIME_REVISION = 2
 
 export function hasJre(jre:string): boolean {
-  try {
-    return hasJreXz(Xb_GlobalContext.getContext(), jre)
-  } catch (error) {
-    return false
-  }
+  // 菜单回调是同步接口，无法可靠查询动态 HSP。只展示本构建支持的运行时；
+  // 启动时再通过 application.createModuleContext 向 Bundle Manager 查询真实模块。
+  return jre === JAVA_VERSION.JAVA17 || jre === JAVA_VERSION.JAVA25
 }
 
 
@@ -45,12 +43,7 @@ export class JVMLauncher {
   }
   async switchJre(jre: JAVA_VERSION): Promise<boolean>{
     const context = Xb_GlobalContext.getContext()
-    if (!hasJreXz(context, jre)){
-      Xb_ToastUtil.showToast({message:`请安装hsp(${jre})`})
-      return false
-    }
     try {
-
       await installJre(context, jre)
       let ns: ESObject = await import(jre);
       if (ns.HOML_NATIVE_RUNTIME_REVISION !== HOML_NATIVE_RUNTIME_REVISION) {
@@ -62,7 +55,9 @@ export class JVMLauncher {
       this.jre = jre
       return true
     }catch (e) {
-      Xb_ToastUtil.showToast({message:`加载hsp(${jre})失败:` + e.message})
+      const code = e.code ? `[${e.code}]` : ''
+      console.error(`resolve/load HSP failed: module=${jre}, code=${e.code}, message=${e.message}`)
+      Xb_ToastUtil.showToast({message:`无法访问hsp(${jre})${code}:` + e.message})
     }
     return false
   }
