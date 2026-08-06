@@ -359,8 +359,31 @@ def patch_stb_resize(data: bytes) -> bytes:
     )
 
 
+def patch_gl_capabilities(data: bytes) -> bytes:
+    editor = ClassEditor(data)
+
+    # 26.x keeps one big transient arena for vertex, index and uniform data.  With
+    # GL_ARB_buffer_storage it allocates that arena once as PERSISTENT|COHERENT,
+    # writes new blocks straight into the still-mapped memory every frame, and only
+    # orders those writes against the GPU with glFenceSync.  Both halves of that
+    # contract are unreliable on this device: coherent mapping is emulated on top of
+    # GLES EXT_buffer_storage, and the fences do not actually gate block reuse.  The
+    # GPU then reads blocks that are still being written, which shows up as torn
+    # geometry wherever a frame rewrites a lot of transient data -- most visibly on
+    # water, whose translucent faces are re-sorted and re-uploaded whenever the
+    # camera moves.  Reporting the extension as absent keeps Minecraft on its own
+    # mutable-buffer path (BufferStorage.Mutable + the map/unmap transient
+    # allocator), where the driver owns the synchronisation.
+    code = bytes((0x03, 0xAC))  # iconst_0; ireturn
+    descriptor = "(Lorg/lwjgl/system/FunctionProvider;Lorg/lwjgl/PointerBuffer;Ljava/util/Set;)Z"
+    return editor.replace_method_codes(
+        {("check_ARB_buffer_storage", descriptor): (1, 3, code, [])}
+    )
+
+
 PATCHES = {
     "org/lwjgl/opengl/GL11C.class": patch_gl11c,
+    "org/lwjgl/opengl/GLCapabilities.class": patch_gl_capabilities,
     "org/lwjgl/stb/STBImageResize.class": patch_stb_resize,
 }
 

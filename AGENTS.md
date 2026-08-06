@@ -19,7 +19,7 @@
 ### 2. 26.x 需要 LWJGL 3.4.x 新 API（最初的 NoSuchMethodError）
 
 - **根因**：启动器始终把 `resfile/lwjgl.jar`（旧定制版）放在 classpath 最前，版本自带 lwjgl 被屏蔽。26.x 客户端引用了内置 jar 没有的 API。
-- **修复**：Python 字节码补丁给 jar 补方法。最初的一次性全量脚本位于本地未跟踪的 `.tmp_probe/patch_lwjgl.py`；当前仓库已跟踪的可复现增量补丁与 CI 校验入口是 `scripts/patch-lwjgl-runtime.py`（目前负责 GL unpack 状态与 STB stride 补丁，不能当作从原版 jar 重建全部历史补丁的脚本）：
+- **修复**：Python 字节码补丁给 jar 补方法。最初的一次性全量脚本位于本地未跟踪的 `.tmp_probe/patch_lwjgl.py`；当前仓库已跟踪的可复现增量补丁与 CI 校验入口是 `scripts/patch-lwjgl-runtime.py`（目前负责 GL unpack 状态、STB stride 与 `ARB_buffer_storage` 屏蔽三项补丁，不能当作从原版 jar 重建全部历史补丁的脚本）：
   - `GLFW`：glfwSetPreeditCallback / glfwSetIMEStatusCallback（返回 null，MC 丢弃返回值）、glfwSetPreeditCursorRectangle（空操作）、glfwPlatformSupported（false）、glfwGetMonitorName（""）
   - `GLFW.glfwGetInputMode`：恒返 0，避免 26.2 查询新增 `GLFW_IME` 键时因旧 Map 无此键而 NPE；仅表示 IME 模式不支持，不等于预编辑已实现
   - `MemoryUtil.memFree(ByteBuffer/IntBuffer)`：**真实转发**到已有 `memFree(Buffer)`（纹理图集/中文字体路径，不能空操作）
@@ -76,11 +76,24 @@
 - **Vulkan 后端**：不可用（已被 `glfwVulkanSupported=false` 屏蔽；启用需补齐 spvc native JNI glue + vk 扩展类）。
 - **IME 预编辑**：不生效（桩返回 null），输入走旧的 char 回调。
 
-### 9. 高速水面场景出现疑似纹理撕裂（未解决，2026-08-06）
+### 9. 高速水面场景出现疑似纹理撕裂（已定位并改，待实机确认，2026-08-06）
 
 - **现象**：游戏现已能够正常进入，但画面会间歇出现类似“撕裂”的异常纹理；高速掠过水面时尤其容易复现。
 - **可观测性**：肉眼与系统录屏都能看到；此前 A/B/C 对照均复现，OpenGL v4 也会发生。
 - **已排除项**：最新 HAP 与 HSP 已按正确顺序成功安装，因此不要再把这个现象归因于 HSP 未安装、HSP 版本不一致或启动阶段黑屏。
-- **已尝试但未完全解决**：`scripts/patch-lwjgl-runtime.py` 已在直接 `glTexSubImage2D` 上传前清零遗留的 `GL_UNPACK_IMAGE_HEIGHT`；游戏 XComponent 也已由 `TEXTURE` 改为独立、不透明的 `SURFACE`。实机仍能复现，后续不要把这两项当成尚未尝试的最终修复。
-- **诊断边界**：由于异常能够进入系统录屏，它不太像只发生在显示面板扫描阶段的传统 VSync 撕裂；应优先检查渲染器输出、纹理/FBO 内容、buffer 复用、交换链/缓冲区年龄及局部刷新路径。这里仅记录排查方向，尚无确定根因。
+- **无效尝试（勿重复）**：`scripts/patch-lwjgl-runtime.py` 在直接 `glTexSubImage2D` 上传前清零遗留的 `GL_UNPACK_IMAGE_HEIGHT`；游戏 XComponent 由 `TEXTURE` 改为独立、不透明的 `SURFACE`。两者都不解决本问题。
+- **根因（静态分析确认调用链）**：26.x 把每帧的顶点/索引/uniform 数据写进一块**常驻映射的 transient arena**。链路是唯一的一条：
+
+  ```
+  GLCapabilities.GL_ARB_buffer_storage
+      → BufferStorage.create()            // true 时才把 "GL_ARB_buffer_storage" 塞进 enabledExtensions
+      → GlHeuristics.createDeviceInfo()   // DeviceFeatures 第 7 个 boolean = persistentMapping
+      → GlCommandEncoder.<init>()         // persistentMapping ? PersistentMapping : Fallback
+  ```
+
+  走 `GlTransientMemory$PersistentMapping` 时，arena 用 `glBufferStorage(PERSISTENT|COHERENT)` 一次性分配并保持映射，之后每帧直接往映射内存里写新块，**不做 `glFlushMappedBufferRange`**，只靠 `glFenceSync` 决定块能否复用。这两个前提在本机都不成立：coherent 映射是 MobileGlues 在 GLES `EXT_buffer_storage` 上模拟的（binary 里能看到 `bufferCoherentAsFlush` 这个专门的兜底开关），fence 也没有真正拦住块复用。结果是 GPU 读到写了一半的块——每帧重写 transient 数据越多越明显，而水面正是**半透明面、摄像机一动就重排序重传**的那部分几何，所以高速掠过水面最容易复现。全渲染器复现也对得上：这段逻辑在 MC 侧，与具体 GL 实现无关。
+- **修复**：`scripts/patch-lwjgl-runtime.py` 新增 `GLCapabilities.check_ARB_buffer_storage` 恒返 false（2 字节方法体 `iconst_0; ireturn`）。该扩展在 MC 侧只有 `BufferStorage` 一处读取，关掉即整条常驻映射链路失效，回落到 MC 自己的 `BufferStorage$Mutable` + `GlTransientMemory$Fallback`（逐块 `glMapBufferRange`/`glUnmapBuffer`，同步交给驱动）。这是 MC 对无 `ARB_buffer_storage` 硬件的原生路径，不是自造分支。
+- **代价**：`glBufferStorage` 不再被调用，缓冲改用 `glBufferData`；理论上有一点吞吐损失，换取正确性。
+- **待确认**：**尚未实机验证**。本地 JRE 在当前 shell 已无法启动（`java -version` 即 SIGSEGV，SVE 向量长度探测为 0），所以 §3 要求的 `Class.forName` 加载级验证这次没跑成；改用离线结构校验（`.tmp_probe/verify_struct.py`：整类重解析、方法体确为 `03ac`、缩短后的 `Code` 未残留 `StackMapTable`、补丁幂等）。重装后请重点回归水面撕裂是否消失，以及帧率有无可感下降。
+- **若仍复现**：下一顺位是 MobileGlues 自己的 `bufferCoherentAsFlush`。注意 `JVMLauncher.initEnv` 目前**只设了 `NGG_DIR_PATH`，没设 `MG_DIR_PATH`**，所以 MobileGlues 找不到 `config.json`，一直跑默认配置；且它会用 `FCL_VERSION_CODE`/`ZALITH_VERSION_CODE` 识别启动器，认不出来就打印 "Unsupported launcher detected, force using default config." 并强制默认配置。要调这个开关得先解决这两点。
 - **后续取证**：保留能稳定复现的水面高速移动场景；记录所用 MC 版本、渲染器和图形设置，并围绕异常发生时刻采集有界 `hilog`。如能加入诊断构建，优先记录逐帧 `glGetError`、FBO/纹理尺寸与绑定状态、swap interval、buffer age/damage region，以及异常前后帧的截图或帧转储。
