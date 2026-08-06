@@ -45,7 +45,7 @@ struct Game {
 
   @LocalBuilder
   gameView(){
-    XComponent({id:"java-game", type: XComponentType.TEXTURE, controller: this.xController})
+    XComponent({id:"java-game", type: XComponentType.SURFACE, controller: this.xController})
       .backgroundColor(Color.Black)
       .width('100%')
       .height('100%')
@@ -65,6 +65,9 @@ struct Game {
     return true;
   }
   aboutToAppear(): void {
+    // 游戏帧始终不透明。使用独立 Surface 并跳过逐像素透明合成，避免任务切换后
+    // TEXTURE 合成链路偶发混入已释放或复用的缓冲内容。
+    this.xController.setXComponentSurfaceConfig({ isOpaque: true })
     this.launchRequested = false
     this.xController.onSurfaceReady = (width: number, height: number) => {
       if (this.launchRequested) {
