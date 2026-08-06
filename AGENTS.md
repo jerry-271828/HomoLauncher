@@ -53,9 +53,9 @@
 
 ### 6. HSP 识别、安装与 Surface 启动链路（后续补录）
 
-- **HAP/HSP 版本与原生运行时错配**：HSP 导出 `HOML_NATIVE_RUNTIME_REVISION=2`，HAP 在进入游戏页前核对；CI 以源码提交生成稳定 `versionCode`，并回读 HAP、jre17、jre25 与 APP 内嵌模块，发布成对 ZIP，避免混装不同 Nightly。
+- **HAP/HSP 版本与原生运行时错配**：HSP 导出 `HOML_NATIVE_RUNTIME_REVISION=2`，HAP 在进入游戏页前核对；CI 以源码提交生成稳定 `versionCode`，并回读 HAP、jre17、jre25 的 `module.json` 校验 bundleName/versionCode 一致，发布成对 ZIP，避免混装不同 Nightly。
 - **HSP 已安装却误报未安装**：旧代码通过替换 entry 的 `resourceDir` 字符串猜 HSP 路径。当前使用 `application.createModuleContext(context, moduleName)` 让 Bundle Manager 返回真实 ModuleContext，再从其 `resourceDir` 找 JRE 压缩包；失败会显示实际错误码。JRE 解压异常也不再被吞掉，而是交给统一启动错误处理。
-- **安装事务顺序**：多模块 APP 只有在安装器把 entry HAP 与 HSP 作为同一事务提交时才适合直接安装。小白调试助手 3.1 会拆开并先尝试 HSP；更新已有旧 entry 时可触发 `9568284 / install version not compatible`。使用成对 ZIP 且只能逐个安装时，必须用同一证书签名并按 **HAP → HSP** 顺序安装。
+- **安装事务顺序**：多模块 APP（App Pack）只有在安装器把 entry HAP 与 HSP 作为同一事务提交时才适合直接安装。小白调试助手 3.1 会拆开并先尝试 HSP；更新已有旧 entry 时可触发 `9568284 / install version not compatible`。**因此 CI 自 2026-08-06 起不再构建也不再发布 `.app`**，只产出 entry HAP、jre17/jre25 HSP 与成对 ZIP。安装必须用同一证书签名并按 **HAP → HSP** 顺序进行。
 - **过早启动 JVM**：旧逻辑在 XComponent `onLoad` 后固定等待 1 秒，可能拿到无效 Surface/尺寸。当前改为首次有效 `onSurfaceChanged` 后传入真实宽高并启动一次；失败会退回上一页并释放 `launching` 锁，避免黑屏页或永久卡住不能重试。实机已确认 MC 26.2 能进入游戏。
 
 ### 7. 可复用的诊断手段

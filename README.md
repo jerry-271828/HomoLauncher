@@ -6,12 +6,12 @@ HomoLauncher 是面向 HarmonyOS 的 Minecraft Java 版启动器。
 
 ### 直接下载
 
-不想配置本地构建环境时，可以直接前往 [Nightly Release](https://github.com/jerry-271828/HomoLauncher/releases/tag/nightly)。Nightly 同时提供完整 `*.app.zip`，以及 `HomoLauncher-jre17-*.zip`、`HomoLauncher-jre25-*.zip` 两种成对安装包：
+不想配置本地构建环境时，可以直接前往 [Nightly Release](https://github.com/jerry-271828/HomoLauncher/releases/tag/nightly)。Nightly 提供 `HomoLauncher-jre17-*.zip`、`HomoLauncher-jre25-*.zip` 两种成对安装包，以及单独的 entry HAP 与两个 JRE HSP：
 
-- `*.app.zip` 解压后是包含 entry、jre17、jre25 的完整 App Pack，**只适用于能以同一证书签名所有内嵌模块，并把它们作为同一安装事务提交的工具**。
-- 成对 ZIP 含同一次构建、同一 `versionCode` 的 entry HAP 与一个 JRE HSP。小白调试助手 3.1 应使用这种包；分别签名/安装时必须使用同一证书，并按 **HAP → HSP** 顺序操作。
+- 成对 ZIP 含同一次构建、同一 `versionCode` 的 entry HAP 与一个 JRE HSP，这是推荐的下载方式。分别签名/安装时必须使用同一证书，并按 **HAP → HSP** 顺序操作。
+- 单独的 `*.hap` / `*.hsp` 与 ZIP 内的文件完全一致，只是便于按需取用。
 
-Nightly 提供的 APP/HAP/HSP 均为**未签名**。已确认小白调试助手 3.1 会把 APP 拆开并先尝试安装 HSP；更新已有旧 entry 时会触发 `9568284 / install version not compatible`，因此不要在该工具中直接安装 APP，也无需为此重置证书/Profile。源码已改用 Bundle Manager 的 `createModuleContext` 获取已安装 HSP 的真实资源目录，安装或解压异常会返回实际错误，而不会再笼统误报“请安装 HSP”。
+Nightly 提供的 HAP/HSP 均为**未签名**。不再发布多模块 App Pack（`.app`）：已确认小白调试助手 3.1 会把它拆开并先尝试安装 HSP，更新已有旧 entry 时会触发 `9568284 / install version not compatible`。源码已改用 Bundle Manager 的 `createModuleContext` 获取已安装 HSP 的真实资源目录，安装或解压异常会返回实际错误，而不会再笼统误报“请安装 HSP”。
 
 ### 从源码构建
 
@@ -43,11 +43,7 @@ JRE 是动态 HSP，还需要构建实际使用的模块（推荐 `jre25`）：
 hvigorw --mode module -p module=jre25@default -p product=default -p buildMode=release assembleHsp --no-daemon
 ```
 
-需要生成包含 entry、jre17、jre25 的完整 APP 时执行：
-
-```shell
-hvigorw --mode project -p product=default -p buildMode=release assembleApp --no-daemon
-```
+多模块 App Pack（`assembleApp`）已不再作为发布产物；仅在确认安装器会把所有模块作为同一事务提交时才有意义，日常安装请使用 HAP + HSP。
 
 如果更新过 `libs/launcher.har`，应先清理工程根目录的 `oh_modules` 以及 `libs/jre17`、`libs/jre25` 的 `oh_modules` 和 `build`，再重新同步依赖。`file:` 依赖的旧缓存可能继续把未签名 `.so` 打进 HSP。
 
@@ -57,7 +53,6 @@ hvigorw --mode project -p product=default -p buildMode=release assembleApp --no-
 entry/build/default/outputs/default/       # entry HAP
 libs/jre17/build/default/outputs/default/  # jre17 HSP
 libs/jre25/build/default/outputs/default/  # jre25 HSP
-build/                                     # assembleApp 的 APP（递归查找 *.app）
 ```
 
 ## 本地签名
@@ -94,4 +89,4 @@ RangeError (length): Invalid value: Valid value range is empty: -1
 code:9568284 error: install version not compatible
 ```
 
-这不表示下载的 HAP/HSP 不是最新版本。请选择同一个 `HomoLauncher-jre*-*.zip` 中的两个文件，用同一证书/Profile 签名，先安装 HAP，成功后再安装 HSP。只有确认安装器会把所有模块作为同一事务提交时，才直接使用 APP。
+这不表示下载的 HAP/HSP 不是最新版本。请选择同一个 `HomoLauncher-jre*-*.zip` 中的两个文件，用同一证书/Profile 签名，先安装 HAP，成功后再安装 HSP。Nightly 已不再提供 APP，正是为了避免这条路径。
