@@ -318,7 +318,14 @@ jobs:
             base=$(basename "$h")
             dst="$RUNNER_TEMP/${base%.*}-${ver}-vc${BUILD_VERSION_CODE}-${sha7}.${base##*.}"
             cp "$h" "$dst"
-            assets+=("$dst")
+            if [ "${base##*.}" = "app" ]; then
+              # GitHub Release 拒绝直接上传 .app 扩展名；外包一层无压缩 ZIP，
+              # 用户解压后仍得到原始 App Pack，内容与 Actions artifact 完全一致。
+              zip -q -0 -j "$dst.zip" "$dst"
+              assets+=("$dst.zip")
+            else
+              assets+=("$dst")
+            fi
           done
           for archive in "$INSTALL_SET_DIR"/*.zip; do
             assets+=("$archive")
@@ -330,7 +337,7 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "Nightly ${ver} (${sha7})" \
             --prerelease \
-            --notes "自动构建的**未签名** APP/HAP/HSP（versionName ${ver}，versionCode ${BUILD_VERSION_CODE}，commit \`${sha7}\`）。推荐使用 \`.app\`，它在一个包内包含 entry、jre17、jre25，可由支持 APP 的工具一次签名安装；成对 ZIP 仅作兼容备用。"
+            --notes "自动构建的**未签名** APP/HAP/HSP（versionName ${ver}，versionCode ${BUILD_VERSION_CODE}，commit \`${sha7}\`）。推荐下载 \`*.app.zip\` 并解压得到 \`.app\`；其中包含 entry、jre17、jre25，可由支持 APP 的工具一次签名安装。成对 ZIP 仅作兼容备用。"
 
       # 推送版本标签（如 1.3.0）时发布正式 Release，标签须与 versionName 一致
       - name: Publish version release
@@ -358,7 +365,12 @@ jobs:
             base=$(basename "$h")
             dst="$RUNNER_TEMP/${base%.*}-${tag}-vc${BUILD_VERSION_CODE}.${base##*.}"
             cp "$h" "$dst"
-            assets+=("$dst")
+            if [ "${base##*.}" = "app" ]; then
+              zip -q -0 -j "$dst.zip" "$dst"
+              assets+=("$dst.zip")
+            else
+              assets+=("$dst")
+            fi
           done
           for archive in "$INSTALL_SET_DIR"/*.zip; do
             assets+=("$archive")
@@ -368,4 +380,4 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "$tag" \
-            --notes "自动构建的**未签名** APP/HAP/HSP（versionName ${ver}，versionCode ${BUILD_VERSION_CODE}，commit \`${sha7}\`）。推荐使用 \`.app\`，它在一个包内包含 entry、jre17、jre25，可由支持 APP 的工具一次签名安装；成对 ZIP 仅作兼容备用。"
+            --notes "自动构建的**未签名** APP/HAP/HSP（versionName ${ver}，versionCode ${BUILD_VERSION_CODE}，commit \`${sha7}\`）。推荐下载 \`*.app.zip\` 并解压得到 \`.app\`；其中包含 entry、jre17、jre25，可由支持 APP 的工具一次签名安装。成对 ZIP 仅作兼容备用。"
