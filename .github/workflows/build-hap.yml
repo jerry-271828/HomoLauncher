@@ -138,9 +138,9 @@ jobs:
           set -euo pipefail
           shopt -s globstar nullglob
 
-          haps=(entry/build/default/outputs/**/*.hap)
-          jre17s=(libs/jre17/build/default/outputs/**/*.hsp)
-          jre25s=(libs/jre25/build/default/outputs/**/*.hsp)
+          haps=(entry/build/default/outputs/default/*.hap)
+          jre17s=(libs/jre17/build/default/outputs/default/*.hsp)
+          jre25s=(libs/jre25/build/default/outputs/default/*.hsp)
           if [ ${#haps[@]} -ne 1 ] || [ ${#jre17s[@]} -ne 1 ] || [ ${#jre25s[@]} -ne 1 ]; then
             echo "expected exactly one entry HAP, jre17 HSP and jre25 HSP"
             exit 1
@@ -210,7 +210,7 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s globstar nullglob
-          haps=(entry/build/default/outputs/**/*.hap)
+          haps=(entry/build/default/outputs/default/*.hap)
           if [ ${#haps[@]} -eq 0 ]; then echo "no .hap found"; exit 1; fi
 
           restool_path=$(find -L "$DEVECO_SDK_HOME" -type f -path '*/toolchains/restool' -print -quit)
@@ -251,7 +251,7 @@ jobs:
           set -euo pipefail
           shopt -s globstar nullglob
 
-          haps=(entry/build/default/outputs/**/*.hap)
+          haps=(entry/build/default/outputs/default/*.hap)
           if [ ${#haps[@]} -ne 1 ]; then echo "expected exactly one .hap"; exit 1; fi
 
           ver=$(grep -oP '"versionName"\s*:\s*"\K[^"]+' AppScope/app.json5)
@@ -260,7 +260,7 @@ jobs:
           mkdir -p "$outputDir"
 
           for jre in jre17 jre25; do
-            hsps=(libs/$jre/build/default/outputs/**/*.hsp)
+            hsps=(libs/$jre/build/default/outputs/default/*.hsp)
             if [ ${#hsps[@]} -ne 1 ]; then echo "expected exactly one $jre .hsp"; exit 1; fi
 
             pairDir="$RUNNER_TEMP/homl-$jre-pair"
@@ -293,8 +293,8 @@ jobs:
         with:
           name: homl-hap
           path: |
-            entry/build/default/outputs/**/*.hap
-            libs/*/build/default/outputs/**/*.hsp
+            entry/build/default/outputs/default/*.hap
+            libs/*/build/default/outputs/default/*.hsp
             build/**/*.app
           if-no-files-found: error
 
@@ -307,7 +307,7 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s globstar nullglob
-          pkgs=(entry/build/default/outputs/**/*.hap libs/*/build/default/outputs/**/*.hsp build/**/*.app)
+          pkgs=(entry/build/default/outputs/default/*.hap libs/*/build/default/outputs/default/*.hsp build/**/*.app)
           if [ ${#pkgs[@]} -eq 0 ]; then echo "no .hap/.hsp/.app found"; exit 1; fi
 
           ver=$(grep -oP '"versionName"\s*:\s*"\K[^"]+' AppScope/app.json5)
@@ -342,7 +342,7 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s globstar nullglob
-          pkgs=(entry/build/default/outputs/**/*.hap libs/*/build/default/outputs/**/*.hsp build/**/*.app)
+          pkgs=(entry/build/default/outputs/default/*.hap libs/*/build/default/outputs/default/*.hsp build/**/*.app)
           if [ ${#pkgs[@]} -eq 0 ]; then echo "no .hap/.hsp/.app found"; exit 1; fi
 
           tag="$GITHUB_REF_NAME"
