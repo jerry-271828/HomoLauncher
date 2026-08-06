@@ -112,7 +112,8 @@ jobs:
           hvigorw --mode module -p module=jre17@default -p product=default -p buildMode=release assembleHsp --no-daemon
 
       # APP 是包含 entry HAP 与全部 deliveryWithInstall HSP 的单一 App Pack。
-      # 支持 APP 的安装器可在一个安装事务中完成所有模块，避免分步安装丢失 HSP。
+      # 仅适用于会统一签名并在一个安装事务中提交所有模块的安装器；小白调试助手 3.1
+      # 会拆包并先尝试 HSP，更新旧版时应改用下方成对 ZIP，按 HAP -> HSP 安装。
       - name: Build APP (release, unsigned)
         run: hvigorw --mode project -p product=default -p buildMode=release assembleApp --no-daemon
 
@@ -279,6 +280,7 @@ jobs:
           Sign both files with the same certificate. Install them together when possible.
           If the installer only accepts one file at a time, install the HAP and then the HSP
           from this directory; never mix either file with another Release or Nightly build.
+          Xiaobai Debug Assistant 3.1 users must use this HAP-then-HSP flow instead of the APP.
           EOF
             (
               cd "$pairDir"
@@ -337,7 +339,7 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "Nightly ${ver} (${sha7})" \
             --prerelease \
-            --notes "自动构建的**未签名** APP/HAP/HSP（versionName ${ver}，versionCode ${BUILD_VERSION_CODE}，commit \`${sha7}\`）。推荐下载 \`*.app.zip\` 并解压得到 \`.app\`；其中包含 entry、jre17、jre25，可由支持 APP 的工具一次签名安装。成对 ZIP 仅作兼容备用。"
+            --notes "自动构建的**未签名** APP/HAP/HSP（versionName ${ver}，versionCode ${BUILD_VERSION_CODE}，commit \`${sha7}\`）。\`*.app.zip\` 仅适用于会统一签名并把 entry、jre17、jre25 作为同一事务提交的安装器。小白调试助手 3.1 请下载对应 JRE 的成对 ZIP，用同一证书/Profile 签名；只能逐个安装时按 HAP → HSP 顺序，且不要混用其他构建。"
 
       # 推送版本标签（如 1.3.0）时发布正式 Release，标签须与 versionName 一致
       - name: Publish version release
@@ -380,4 +382,4 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "$tag" \
-            --notes "自动构建的**未签名** APP/HAP/HSP（versionName ${ver}，versionCode ${BUILD_VERSION_CODE}，commit \`${sha7}\`）。推荐下载 \`*.app.zip\` 并解压得到 \`.app\`；其中包含 entry、jre17、jre25，可由支持 APP 的工具一次签名安装。成对 ZIP 仅作兼容备用。"
+            --notes "自动构建的**未签名** APP/HAP/HSP（versionName ${ver}，versionCode ${BUILD_VERSION_CODE}，commit \`${sha7}\`）。\`*.app.zip\` 仅适用于会统一签名并把 entry、jre17、jre25 作为同一事务提交的安装器。小白调试助手 3.1 请下载对应 JRE 的成对 ZIP，用同一证书/Profile 签名；只能逐个安装时按 HAP → HSP 顺序，且不要混用其他构建。"
