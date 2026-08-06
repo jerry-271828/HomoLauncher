@@ -27,16 +27,12 @@ export const installJre = async (context: common.Context, version: string)=> {
 }
 
 export async function decompressXz(target: string, dir: string){
-  try {
-    await archiveLib.decompress({
-      inFile: target,
-      outFile: dir,
-      onProgress: (current, total) => {
-        console.log(`解压进度: ${current}/${total} 字节`)
-      }
-    })
-  }catch (e) {
-    console.error("decompressXz err:" + e.message)
-    throw e
-  }
+  // 不在这里吞掉异常；由 switchJre 的统一错误处理记录实际失败原因。
+  await archiveLib.decompress({
+    inFile: target,
+    outFile: dir,
+    onProgress: (current, total) => {
+      console.log(`解压进度: ${current}/${total} 字节`)
+    }
+  })
 }
