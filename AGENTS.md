@@ -84,7 +84,7 @@
   - **静态地形完全正常**。近处的泥土、草、沙子、石头、水，纹理干净边缘清晰，没有任何异常。
   - 因此问题只出在**会被反复重写的几何**上：区块流式加载时的网格上传，以及摄像机一动就重排序重传的半透明（水）索引。烘焙一次就不再改的地形不受影响。
 
-#### 决定性约束：三个渲染器都复现 → 责任在它们的公共层
+#### 决定性约束：连无翻译层的 GLV4 都复现 → 责任在 Mesa
 
 本机 GL/GLES 栈全部是 **Mesa 25.0.1**，不是 Huawei 私有驱动：
 
@@ -96,10 +96,24 @@
 
 - GLV4 直接用 Mesa 桌面 GL；MobileGlues / GL4ES 把 GL 翻译成 GLES 之后同样落到 Mesa。
 - **Mesa 是三个渲染器唯一的公共层**，所以"换渲染器照样复现"这条约束，只有落在 Mesa（或其下的驱动）上才解释得通。任何"某个翻译层模拟得不对"的假设都无法满足这条约束——这是走了两轮弯路才想明白的。
+- **GLV4 是纯 Mesa 桌面 GL，中间没有任何翻译层，它同样复现**（实机确认）。这一条单独就足以排除掉所有"某个翻译层实现得不对"的假设。
+- **实证**：`hs_err.log` 抓到过一次崩溃栈——
+
+  ```
+  memcpy (ld-musl)  ←  libgallium-25.0.1 ×5  ←  GL11C.nglTexSubImage2D
+                    ←  GlStateManager._texSubImage2D(...ByteBuffer)
+  ```
+
+  Mesa 从应用给的客户端内存里**读越界**直接段错误。那一次跑的还是 MobileGlues，栈里却是 libgallium，又一次印证 Mesa 在下面。同一类问题落到几何路径上通常不会崩，只会把越界/陈旧字节当顶点索引用——正好就是长条三角形。
 
 #### 本轮改动
 
-`JVMLauncher.initEnv` 增加 `setenv("mesa_glthread", "false")`。
+`JVMLauncher.initEnv` 关掉 Mesa 的两个异步层：
+
+```
+setenv("mesa_glthread", "false");   // GL 调用转投工作线程
+setenv("GALLIUM_THREAD", "0");      // 驱动级 threaded context（§2 说的 threaded staging path）
+```
 
 Mesa 的 glthread 把 GL 调用转投到工作线程执行。携带**客户端内存**的调用（MC 上传区块网格走 `glBufferSubData` 直传 direct ByteBuffer）如果在工作线程真正消费之前，那块内存已经被 MC 回收重用，工作线程读到的就是陈旧/无关字节——正好产生"三角形连到不该连的顶点"这一现象。上传越密集越容易撞上，而高速掠过水面正是区块流式加载 + 半透明重排序最密集的时候；只上传一次的静态地形一旦侥幸正确就永远正确。
 

@@ -274,12 +274,14 @@ export class JVMLauncher {
 
     // 本机整条 GL/GLES 栈都是 Mesa 25.0.1（/system/lib64/libgallium-25.0.1.so），
     // GLV4 直接用它，MobileGlues/GL4ES 翻译成 GLES 后也落到它——这是三个渲染器
-    // 唯一的公共层，也是三个渲染器都会复现几何拉伸的原因。Mesa 的 glthread 把 GL
-    // 调用转投到工作线程执行，携带客户端内存的调用（区块网格用 glBufferSubData
-    // 直传 direct ByteBuffer）如果在工作线程消费之前就被 MC 回收重用，上传的就是
-    // 陈旧字节，表现为三角形连到不该连的顶点、被抻成长条。§2 里 Mesa 在
-    // 「threaded staging path」上多读直接像素缓冲的老问题就是同一类。
+    // 唯一的公共层，也是三个渲染器（含无翻译层的 GLV4）都会复现几何拉伸的原因。
+    // hs_err 的崩溃栈已经抓到实证：memcpy(musl) ← libgallium ×5 ← nglTexSubImage2D，
+    // 即 Mesa 从客户端内存里多读越界。同一类问题落到几何路径上不会崩，只会把陈旧/
+    // 越界字节当成顶点索引用，于是三角形连到不该连的顶点、被抻成长条。
+    // 两个异步层各关一个：glthread 负责 GL 调用转投工作线程，GALLIUM_THREAD 负责
+    // 驱动级 threaded context（§2 注释里说的 "threaded staging path"）。
     setenv("mesa_glthread", "false");
+    setenv("GALLIUM_THREAD", "0");
 
     setenv("ALSOFT_LOGLEVEL", "0");
     // hap需要手动设置 javahome和dl_dir
