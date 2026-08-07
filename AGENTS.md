@@ -19,7 +19,7 @@
 ### 2. 26.x 需要 LWJGL 3.4.x 新 API（最初的 NoSuchMethodError）
 
 - **根因**：启动器始终把 `resfile/lwjgl.jar`（旧定制版）放在 classpath 最前，版本自带 lwjgl 被屏蔽。26.x 客户端引用了内置 jar 没有的 API。
-- **修复**：Python 字节码补丁给 jar 补方法。最初的一次性全量脚本位于本地未跟踪的 `.tmp_probe/patch_lwjgl.py`；当前仓库已跟踪的可复现增量补丁与 CI 校验入口是 `scripts/patch-lwjgl-runtime.py`（目前负责 GL unpack 状态、STB stride，以及屏蔽 `ARB_buffer_storage` / `ARB_direct_state_access` / `ARB_vertex_attrib_binding` 三个现代 GL 快路径，不能当作从原版 jar 重建全部历史补丁的脚本）：
+- **修复**：Python 字节码补丁给 jar 补方法。最初的一次性全量脚本位于本地未跟踪的 `.tmp_probe/patch_lwjgl.py`；当前仓库已跟踪的可复现增量补丁与 CI 校验入口是 `scripts/patch-lwjgl-runtime.py`（目前负责 GL unpack 状态与 STB stride 两项补丁，不能当作从原版 jar 重建全部历史补丁的脚本）：
   - `GLFW`：glfwSetPreeditCallback / glfwSetIMEStatusCallback（返回 null，MC 丢弃返回值）、glfwSetPreeditCursorRectangle（空操作）、glfwPlatformSupported（false）、glfwGetMonitorName（""）
   - `GLFW.glfwGetInputMode`：恒返 0，避免 26.2 查询新增 `GLFW_IME` 键时因旧 Map 无此键而 NPE；仅表示 IME 模式不支持，不等于预编辑已实现
   - `MemoryUtil.memFree(ByteBuffer/IntBuffer)`：**真实转发**到已有 `memFree(Buffer)`（纹理图集/中文字体路径，不能空操作）
@@ -76,29 +76,47 @@
 - **Vulkan 后端**：不可用（已被 `glfwVulkanSupported=false` 屏蔽；启用需补齐 spvc native JNI glue + vk 扩展类）。
 - **IME 预编辑**：不生效（桩返回 null），输入走旧的 char 回调。
 
-### 9. 高速掠过水面时几何被拉成长条（第二轮修改，待实机确认，2026-08-07）
+### 9. 高速掠过水面时几何被拉成长条（第三轮修改，待实机确认，2026-08-07）
 
 - **现象**：高速掠过水面时，画面间歇出现大量**又细又长的三角形**，从屏幕一侧斜拉到另一侧，互相交叉成网状。
 - **关键证据（务必先看清再动手）**：把录屏原始帧放大后可以确认——
   - 长条上**带着真实纹理并被拉伸**（能看到一条泥土面被抻成细长条），说明三角形连接了**本不该连在一起的顶点**，即顶点/索引数据错乱，不是显示层撕裂、也不是纹理内容坏了。
   - **静态地形完全正常**。近处的泥土、草、沙子、石头、水，纹理干净边缘清晰，没有任何异常。
   - 因此问题只出在**会被反复重写的几何**上：区块流式加载时的网格上传，以及摄像机一动就重排序重传的半透明（水）索引。烘焙一次就不再改的地形不受影响。
-- **不要重复的弯路**：
-  - 这**不是** VSync 撕裂（能进录屏），不是纹理图集问题，也不是 `GL_UNPACK_*` 状态问题（`writeToTexture` 里 MC 把 `ROW_LENGTH` 设成上传宽度、两个 `SKIP_*` 设成 0，语义等同默认值，翻译层无从理解错）。
-  - 清零 `GL_UNPACK_IMAGE_HEIGHT`、XComponent 由 `TEXTURE` 改 `SURFACE`，两者都已验证无效。
-  - `STBImageResize` 那条补丁只在 `GameRenderer` 的自动截图/缩略图路径上被调用（全 jar 只有这一个调用者），与游戏内贴图无关，不要再怀疑它。
-  - MC 的缺失纹理占位符是**品红+黑**方格（`MissingTextureAtlasSprite` 里的 `0xFF000000` / `0xFFF800F8`）。看到灰色异常不等于贴图加载失败。
-- **本轮改动**：26.x 有三个「现代 GL 快路径」开关，每个在 MC 侧都**只有一处读取**，且都有 GL 3.3 时代的回退实现。三者合起来承载了全部顶点/索引数据与属性绑定，正好是出问题的那些数据：
 
-  | `GLCapabilities` 字段 | 快路径 | 回退路径 |
-  | --- | --- | --- |
-  | `GL_ARB_buffer_storage` | 不可变存储 + 常驻映射 arena | `glBufferData` + map/unmap arena |
-  | `GL_ARB_direct_state_access` | `glNamedBuffer*`（不绑定） | `glBindBuffer` + `glBufferSubData` |
-  | `GL_ARB_vertex_attrib_binding` | `glBindVertexBuffer`/`glVertexAttribFormat` | `glVertexAttribPointer` |
+#### 决定性约束：三个渲染器都复现 → 责任在它们的公共层
 
-  三个都是 GL 4.3~4.5 特性，在本机全部由 GL→GLES 翻译层模拟而非驱动原生实现。`scripts/patch-lwjgl-runtime.py` 把对应的 `GLCapabilities.check_ARB_*` 三个方法一律改成恒返 false（各 2 字节 `iconst_0; ireturn`），让 MC 回到它在 4.3 以前硬件上本来就会走的路径——不是自造分支。
-- **为什么一次关三个**：单独关 `buffer_storage` 已实机验证**完全无效**，而且很可能压根没生效（MobileGlues 主扩展字符串里就没有 `GL_ARB_buffer_storage`，MC 本来就在走 `Fallback`）。每轮验证都要用户重新构建安装，所以这次先一起关掉换取最大命中率；**如果这轮有效，再逐个打开做二分**，把真正的责任方钉死。
-- **代价**：多一次 buffer 绑定、缓冲改用 `glBufferData`、属性用 `glVertexAttribPointer`。理论上有少量吞吐损失，需要留意帧率是否可感下降。
-- **待确认**：**尚未实机验证**。本地 JRE 在当前 shell 已无法启动（`java -version` 即 SIGSEGV，SVE 向量长度探测为 0），§3 要求的 `Class.forName` 加载级验证跑不了；改用离线结构校验（`.tmp_probe/verify_struct.py`：整类重解析到字节尾、方法体确为 `03ac`、缩短后的 `Code` 未残留 `StackMapTable`、补丁幂等）。
-- **若仍复现**：下一顺位是 MobileGlues 自己的 `bufferCoherentAsFlush`。注意 `JVMLauncher.initEnv` 目前**只设了 `NGG_DIR_PATH`，没设 `MG_DIR_PATH`**，所以 MobileGlues 找不到 `config.json`，一直跑默认配置；且它会用 `FCL_VERSION_CODE`/`ZALITH_VERSION_CODE` 识别启动器，认不出来就打印 "Unsupported launcher detected, force using default config." 并强制默认配置。要调这个开关得先解决这两点。
+本机 GL/GLES 栈全部是 **Mesa 25.0.1**，不是 Huawei 私有驱动：
+
+```
+/system/lib64/libgallium-25.0.1.so   # Mesa Gallium 主体
+/system/lib64/libEGL_mesa.so
+/system/lib64/ndk/libGLv4.so         # GLV4 选项加载的就是它（本机可用，不是只有鸿蒙PC才有）
+```
+
+- GLV4 直接用 Mesa 桌面 GL；MobileGlues / GL4ES 把 GL 翻译成 GLES 之后同样落到 Mesa。
+- **Mesa 是三个渲染器唯一的公共层**，所以"换渲染器照样复现"这条约束，只有落在 Mesa（或其下的驱动）上才解释得通。任何"某个翻译层模拟得不对"的假设都无法满足这条约束——这是走了两轮弯路才想明白的。
+
+#### 本轮改动
+
+`JVMLauncher.initEnv` 增加 `setenv("mesa_glthread", "false")`。
+
+Mesa 的 glthread 把 GL 调用转投到工作线程执行。携带**客户端内存**的调用（MC 上传区块网格走 `glBufferSubData` 直传 direct ByteBuffer）如果在工作线程真正消费之前，那块内存已经被 MC 回收重用，工作线程读到的就是陈旧/无关字节——正好产生"三角形连到不该连的顶点"这一现象。上传越密集越容易撞上，而高速掠过水面正是区块流式加载 + 半透明重排序最密集的时候；只上传一次的静态地形一旦侥幸正确就永远正确。
+
+**这不是新猜测**：§2 里 `glTexSubImage2D` 那条补丁的原始注释就写着「Mesa 25.0.1 在 threaded staging path 上多读直接像素缓冲」——同一个 glthread，同一类"延迟消费客户端内存"的问题，只不过上次撞在纹理路径、这次撞在几何路径。
+
+`libgallium-25.0.1.so` 里能直接读到 `mesa_glthread` 这个 driconf 选项名，以及 `"ATTENTION: default value of option mesa_glthread overridden by environment."`——确认它**可以用同名环境变量覆盖**。`initEnv` 在 `dl_open(渲染器)` 之前执行，环境变量能在 Mesa 建上下文前生效。
+
+#### 已否定的假设（不要重来）
+
+- **不是** VSync 撕裂（能进录屏），不是纹理图集问题，也不是 `GL_UNPACK_*` 状态问题（`writeToTexture` 里 MC 把 `ROW_LENGTH` 设成上传宽度、两个 `SKIP_*` 设成 0，语义等同默认值）。
+- 清零 `GL_UNPACK_IMAGE_HEIGHT`、XComponent 由 `TEXTURE` 改 `SURFACE`，两者都已实机验证无效。
+- **屏蔽 `ARB_buffer_storage`（单独）已实机验证无效**，而且很可能压根没生效（MobileGlues 主扩展字符串里就没有它，MC 本来就在走 `Fallback`）。
+- 随后"一次屏蔽 `ARB_buffer_storage` / `ARB_direct_state_access` / `ARB_vertex_attrib_binding` 三个现代 GL 快路径"的改动**已在本轮回退**：它的前提是"这些特性由翻译层模拟所以不可靠"，但底层是 Mesa 桌面 GL，这三个特性是原生实现的，前提不成立。回退后 `lwjgl.jar` 与 7f49570 的基线逐字节一致。
+- `STBImageResize` 那条补丁只在 `GameRenderer` 的自动截图/缩略图路径上被调用（全 jar 只有这一个调用者），与游戏内几何/贴图无关。
+- MC 的缺失纹理占位符是**品红+黑**方格（`MissingTextureAtlasSprite` 的 `0xFF000000` / `0xFFF800F8`）。看到灰色异常不等于贴图加载失败。
+
+#### 若仍复现
+
+下一顺位：`mesa_glthread` 之外 Mesa 还有 `mesa_glthread_app_profile` / `mesa_glthread_driver`；再往下就要怀疑 JIT（本机 JVM 有 SVE 探测异常的先例，`-XX:UseSVE=0` 值得一试，它能解释"与渲染器无关的数据损坏"）。另外 MobileGlues 自己的 `bufferCoherentAsFlush` 仍未验证，但要先解决 `JVMLauncher.initEnv` **没设 `MG_DIR_PATH`**（MobileGlues 找不到 `config.json`，一直跑默认配置）以及它用 `FCL_VERSION_CODE`/`ZALITH_VERSION_CODE` 识别启动器、认不出就打印 "Unsupported launcher detected, force using default config." 这两个前置问题。
 - **后续取证**：保留能稳定复现的水面高速移动场景；记录所用 MC 版本、渲染器和图形设置，并围绕异常发生时刻采集有界 `hilog`。如能加入诊断构建，优先记录逐帧 `glGetError`、FBO/纹理尺寸与绑定状态、swap interval、buffer age/damage region，以及异常前后帧的截图或帧转储。

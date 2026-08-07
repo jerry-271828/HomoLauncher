@@ -359,45 +359,8 @@ def patch_stb_resize(data: bytes) -> bytes:
     )
 
 
-def patch_gl_capabilities(data: bytes) -> bytes:
-    editor = ClassEditor(data)
-
-    # Every one of these is read in exactly one place in Minecraft 26.x, and each
-    # selects between a GL 4.3+ fast path and the classic GL 3.3 path:
-    #
-    #   buffer_storage        BufferStorage.create()      immutable storage + a
-    #                                                     persistently mapped arena
-    #   direct_state_access   DirectStateAccess.create()  glNamedBuffer* with no bind
-    #   vertex_attrib_binding VertexArrayCache.create()   glBindVertexBuffer /
-    #                                                     glVertexAttribFormat
-    #
-    # Between them they carry every byte of vertex and index data and all of the
-    # attribute wiring.  On this device they are emulated by the GL-to-GLES
-    # translator rather than implemented by the driver, and the result is triangles
-    # that join vertices which do not belong together -- long stretched slivers that
-    # smear a block face across the screen.  It shows up while flying fast over
-    # water because that is when the most chunk geometry is uploaded and translucent
-    # sections are re-sorted; static terrain that is uploaded once looks perfect.
-    #
-    # Reporting all three as absent keeps Minecraft on its own GL 3.3 paths
-    # (glBufferData / glBindBuffer + glBufferSubData / glVertexAttribPointer), which
-    # every translation layer implements well.  These are the paths Minecraft uses
-    # on pre-4.3 desktop hardware, not a bespoke branch.
-    disabled = (
-        "check_ARB_buffer_storage",
-        "check_ARB_direct_state_access",
-        "check_ARB_vertex_attrib_binding",
-    )
-    code = bytes((0x03, 0xAC))  # iconst_0; ireturn
-    descriptor = "(Lorg/lwjgl/system/FunctionProvider;Lorg/lwjgl/PointerBuffer;Ljava/util/Set;)Z"
-    return editor.replace_method_codes(
-        {(name, descriptor): (1, 3, code, []) for name in disabled}
-    )
-
-
 PATCHES = {
     "org/lwjgl/opengl/GL11C.class": patch_gl11c,
-    "org/lwjgl/opengl/GLCapabilities.class": patch_gl_capabilities,
     "org/lwjgl/stb/STBImageResize.class": patch_stb_resize,
 }
 
